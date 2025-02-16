@@ -11,7 +11,7 @@ port == 5432
 password == "secret"
 retry_count == 3
 
-<database/advanced>
+<database<advanced>>
 pool_size == 10
 timeout == 30
 options == ["fast", "secure"]

@@ -38,37 +38,37 @@ impl ThethaCoreConfig {
     /// Parse a configuration from an input string.
     pub fn parse(input: &str) -> Result<Self, String> {
         let mut config = ThethaCoreConfig::new();
-        // current_sections holds nested section names.
+        // Holds the current nested section names.
         let mut current_sections: Vec<String> = Vec::new();
 
-        // Updated regex: capture anything until the first ">".
-        let section_regex = Regex::new(r"^<([^>]+)>$").unwrap();
         let kv_regex = Regex::new(r"^(\w+)\s*==\s*(.+)$").unwrap();
 
         for (line_num, line) in input.lines().enumerate() {
             let trimmed = line.trim();
 
-            // Skip empty lines and comments.
             if trimmed.is_empty() || trimmed.starts_with("#") || trimmed.starts_with("//") {
                 continue;
             }
 
-            // Section header
-            if let Some(caps) = section_regex.captures(trimmed) {
-                let section_text = caps.get(1).unwrap().as_str();
-                // Split nested section names on '<'
-                current_sections = section_text
-                    .split('<')
-                    .map(|s| s.trim().to_string())
-                    .collect();
-
-                // Create a single section key by joining nested names with "/"
+            if trimmed.starts_with('<') {
+                if trimmed.ends_with(">>") {
+                    let inner = &trimmed[1..trimmed.len()-2];
+                    current_sections = inner
+                        .split('<')
+                        .map(|s| s.trim().to_string())
+                        .collect();
+                } else if trimmed.ends_with('>') {
+                    let inner = &trimmed[1..trimmed.len()-1];
+                    current_sections = vec![inner.trim().to_string()];
+                } else {
+                    return Err(format!("❌ Syntax error on line {}: Invalid section header '{}'", line_num + 1, trimmed));
+                }
                 let section_key = current_sections.join("/");
                 config.sections.entry(section_key).or_insert(HashMap::new());
                 continue;
             }
 
-            // Key-Value pair
+            // Key-Value pair handling.
             if let Some(caps) = kv_regex.captures(trimmed) {
                 let key = caps.get(1).unwrap().as_str().to_string();
                 let value_str = caps.get(2).unwrap().as_str().trim();
@@ -101,14 +101,11 @@ impl ThethaCoreConfig {
     }
 }
 
-/// Parse a value string into a Value, with detailed error messages.
 fn parse_value(value_str: &str, line_num: usize) -> Result<Value, String> {
-    // Precompiled regex patterns.
     let boolean_null_regex = Regex::new(r"^(True|False|Null)$").unwrap();
     let array_regex = Regex::new(r"^\[(.*)\]$").unwrap();
     let object_regex = Regex::new(r"^\{(.*)\}$").unwrap();
 
-    // Check for boolean or null.
     if boolean_null_regex.is_match(value_str) {
         match value_str {
             "True" => return Ok(Value::Boolean(true)),
@@ -116,36 +113,23 @@ fn parse_value(value_str: &str, line_num: usize) -> Result<Value, String> {
             "Null" => return Ok(Value::Null),
             _ => unreachable!(),
         }
-    }
-    // String literal: must be enclosed in double quotes.
-    else if value_str.starts_with('"') && value_str.ends_with('"') {
-        return Ok(Value::String(
-            value_str[1..value_str.len() - 1].to_string(),
-        ));
-    }
-    // Try parsing as integer.
-    else if let Ok(num) = value_str.parse::<i64>() {
+    } else if value_str.starts_with('"') && value_str.ends_with('"') {
+        return Ok(Value::String(value_str[1..value_str.len()-1].to_string()));
+    } else if let Ok(num) = value_str.parse::<i64>() {
         return Ok(Value::Integer(num));
-    }
-    // Try parsing as float.
-    else if let Ok(num) = value_str.parse::<f64>() {
+    } else if let Ok(num) = value_str.parse::<f64>() {
         return Ok(Value::Float(num));
-    }
-    // Array: [item1, item2, ...]
-    else if let Some(caps) = array_regex.captures(value_str) {
+    } else if let Some(caps) = array_regex.captures(value_str) {
         let items_str = caps.get(1).unwrap().as_str();
         let items: Result<Vec<Value>, String> = if items_str.trim().is_empty() {
             Ok(vec![])
         } else {
-            items_str
-                .split(',')
+            items_str.split(',')
                 .map(|s| parse_value(s.trim(), line_num))
                 .collect()
         };
         return items.map(Value::Array);
-    }
-    // Object: { key1 == value1, key2 == value2 }
-    else if let Some(caps) = object_regex.captures(value_str) {
+    } else if let Some(caps) = object_regex.captures(value_str) {
         let content = caps.get(1).unwrap().as_str();
         let mut object = HashMap::new();
         if content.trim().is_empty() {
@@ -159,9 +143,8 @@ fn parse_value(value_str: &str, line_num: usize) -> Result<Value, String> {
                     line_num, pair
                 ));
             }
-            // Optionally remove surrounding quotes from keys.
             let key = if kv[0].starts_with('"') && kv[0].ends_with('"') {
-                &kv[0][1..kv[0].len() - 1]
+                &kv[0][1..kv[0].len()-1]
             } else {
                 kv[0]
             };
