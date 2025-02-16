@@ -1,4 +1,5 @@
-// Example ThethaCore file
+# ThethaCore Config File
+
 <general>
 app_name == "MyApp"
 version == 1.2
@@ -9,3 +10,12 @@ host == "localhost"
 port == 5432
 password == "secret"
 retry_count == 3
+
+<database/advanced>
+pool_size == 10
+timeout == 30
+options == ["fast", "secure"]
+
+<api>
+base_url == "https://api.example.com"
+headers == { "Authorization" == "Bearer secret_token_haha", "Content-Type" == "application/json" }
